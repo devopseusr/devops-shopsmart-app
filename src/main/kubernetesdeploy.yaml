@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bankingapp-deployment
+  labels:
+    app: bankingapp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bankingapp
+  template:
+    metadata:
+      labels:
+        app: bankingapp
+    spec:
+      containers:
+      - name: bankingapp-container
+        image: archana035/bankapp-eta-app:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: jdbc:mysql://mysql-service:3306/bankingdb
+        - name: SPRING_DATASOURCE_USERNAME
+          value: root
+        - name: SPRING_DATASOURCE_PASSWORD
+          value: rootpassword
