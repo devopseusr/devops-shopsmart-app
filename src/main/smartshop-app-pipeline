@@ -1,0 +1,90 @@
+pipeline {
+    agent { label 'slave1' }
+
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credential')
+        IMAGE_NAME = "archana035/shopsmart-app"
+        GIT_REPO = "https://github.com/devopseusr/devops-shopsmart-app.git"
+    }
+
+    stages {
+        stage('SCM Checkout') {
+            steps {
+                echo '📦 Checking out code from GitHub...'
+                git branch: 'main', url: "${GIT_REPO}"
+            }
+        }
+
+        stage('Application Build') {
+            steps {
+                echo '🏗️ Building application using Maven...'
+                sh 'mvn clean package -DskipTests'
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                echo '🐳 Building Docker image...'
+                sh """
+                    docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+                    docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest
+                    docker image ls
+                """
+            }
+        }
+
+        stage('Login to DockerHub') {
+            steps {
+                echo '🔑 Logging in to DockerHub...'
+                sh '''
+                    echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin
+                '''
+            }
+        }
+
+        stage('Publish Docker Image') {
+            steps {
+                echo '📤 Pushing Docker image to DockerHub...'
+                sh """
+                    docker push ${IMAGE_NAME}:${BUILD_NUMBER}
+                    docker push ${IMAGE_NAME}:latest
+                """
+            }
+        }
+
+        stage('Deploy to Kubernetes Cluster') {
+            steps {
+                echo '🚀 Deploying to Kubernetes cluster...'
+                script {
+                    sshPublisher(
+                        publishers: [
+                            sshPublisherDesc(
+                                configName: 'k8s-master',
+                                transfers: [
+                                    sshTransfer(
+                                        sourceFiles: 'kubernetesdeploy.yaml',
+                                        remoteDirectory: '/home/devopsuser/',
+                                        execCommand: '''
+                                            echo "Applying Kubernetes deployment..."
+                                            kubectl apply -f /home/devopsuser/kubernetesdeploy.yaml
+                                            kubectl get pods -o wide
+                                        '''
+                                    )
+                                ]
+                            )
+                        ]
+                    )
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ CI/CD pipeline executed successfully! Application deployed to Kubernetes.'
+        }
+        failure {
+            echo '❌ Build failed. Please check logs in Jenkins for details.'
+        }
+    }
+}
